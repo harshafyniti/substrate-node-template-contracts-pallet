@@ -1,6 +1,6 @@
 use sp_core::{Pair, Public, sr25519};
 use node_template_runtime::{
-	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig,
+	ContractsConfig, MILLICENTS, AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig,
 	SudoConfig, IndicesConfig, SystemConfig, WASM_BINARY, Signature
 };
 use sp_consensus_aura::sr25519::{AuthorityId as AuraId};
@@ -118,7 +118,17 @@ fn testnet_genesis(initial_authorities: Vec<(AuraId, GrandpaId)>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
 	_enable_println: bool) -> GenesisConfig {
+
+	/*** Add This Block ***/
+	let mut contracts_config = ContractsConfig {
+		current_schedule: Default::default(),
+		gas_price: 1 * MILLICENTS,
+	};
+	// IMPORTANT: println should only be enabled on development chains!
+	contracts_config.current_schedule.enable_println = enable_println;
+	/*** End Added Block ***/
 	GenesisConfig {
+                contracts: Some(contracts_config),
 		system: Some(SystemConfig {
 			code: WASM_BINARY.to_vec(),
 			changes_trie_config: Default::default(),
