@@ -93,12 +93,15 @@ macro_rules! new_full_start {
 /// Builds a new service for a full client.
 pub fn new_full<C: Send + Default + 'static>(config: Configuration<C, GenesisConfig>)
 	-> Result<impl AbstractService, ServiceError>
-{
-	let is_authority = config.roles.is_authority();
+{       // added for offchain worker pallet
+        // This clones the key for Alice.
+    let dev_seed = config.dev_key_seed.clone();
+	
+    let is_authority = config.roles.is_authority();
 	let force_authoring = config.force_authoring;
 	let name = config.name.clone();
 	let disable_grandpa = config.disable_grandpa;
-
+   
 	// sentry nodes announce themselves as authorities to the network
 	// and should run the same protocols authorities do, but it should
 	// never actively participate in any consensus process.
@@ -115,6 +118,19 @@ pub fn new_full<C: Send + Default + 'static>(config: Configuration<C, GenesisCon
 			Ok(Arc::new(GrandpaFinalityProofProvider::new(backend, client)) as _)
 		)?
 		.build()?;
+       
+        // added for offchain worker pallet
+        // Add the following section to add the key to the keystore.
+	if let Some(seed) = dev_seed {
+          service
+		.keystore()
+		.write()
+		.insert_ephemeral_from_seed_by_type::<runtime::offchain_pallet::crypto::Pair>(
+		&seed,
+		runtime::offchain_pallet::KEY_TYPE,
+		)
+		.expect("Dev Seed should always succeed.");
+	}
 
 	if participates_in_consensus {
 		let proposer = sc_basic_authority::ProposerFactory {

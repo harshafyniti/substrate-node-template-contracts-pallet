@@ -8,20 +8,40 @@
 /// For more guidance on Substrate modules, see the example module
 /// https://github.com/paritytech/substrate/blob/master/frame/example/src/lib.rs
 
-use frame_support::{decl_module, decl_storage, decl_event, dispatch::DispatchResult};
+use frame_support::{debug, dispatch, decl_module, decl_storage, decl_event, dispatch::DispatchResult};
 use system::ensure_signed;
 
-/// The module's configuration trait.
-pub trait Trait: system::Trait {
-	// TODO: Add other types and constants required configure this module.
+use sp_core::crypto::KeyTypeId;
+use sp_std::vec::Vec;
 
-	/// The overarching event type.
-	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
+use system::offchain;
+use sp_runtime::transaction_validity::{
+  TransactionValidity, TransactionLongevity, ValidTransaction, InvalidTransaction
+};
+
+pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"abcd");
+
+pub mod crypto {
+  pub use super::KEY_TYPE;
+  use sp_runtime::app_crypto::{app_crypto, sr25519};
+  app_crypto!(sr25519, KEY_TYPE);
 }
+
+
+pub trait Trait: timestamp::Trait + system::Trait {
+  /// The overarching event type.
+  type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
+  type Call: From<Call<Self>>;
+
+  type SubmitSignedTransaction: offchain::SubmitSignedTransaction<Self, <Self as Trait>::Call>;
+  type SubmitUnsignedTransaction: offchain::SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
+}
+
+
 
 // This module's storage items.
 decl_storage! {
-	trait Store for Module<T: Trait> as TemplateModule {
+	trait Store for Module<T: Trait> as OffchainPallet {
 		// Just a dummy storage item.
 		// Here we are declaring a StorageValue, `Something` as a Option<u32>
 		// `get(fn something)` is the default getter which returns either the stored `u32` or `None` if nothing stored
@@ -52,6 +72,18 @@ decl_module! {
 			Self::deposit_event(RawEvent::SomethingStored(something, who));
 			Ok(())
 		}
+
+		pub fn onchain_callback(origin, _block: T::BlockNumber, input: Vec<u8>) -> dispatch::DispatchResult {
+		      let who = ensure_signed(origin)?;
+		      debug::info!("{:?}", core::str::from_utf8(&input).unwrap());
+		      Ok(())
+		}
+
+		fn offchain_worker(block: T::BlockNumber) {
+		      // Here we specify the function to be called back on-chain in next block import.
+		      let call = Call::onchain_callback(block, b"hello world!".to_vec());
+		      T::SubmitSignedTransaction::submit_signed(call);
+		}           
 	}
 }
 
@@ -111,7 +143,7 @@ mod tests {
 	impl Trait for Test {
 		type Event = ();
 	}
-	type TemplateModule = Module<Test>;
+	type OffchainPallet = Module<Test>;
 
 	// This function basically just builds a genesis storage key/value store according to
 	// our desired mockup.
@@ -124,9 +156,9 @@ mod tests {
 		new_test_ext().execute_with(|| {
 			// Just a dummy test for the dummy funtion `do_something`
 			// calling the `do_something` function with a value 42
-			assert_ok!(TemplateModule::do_something(Origin::signed(1), 42));
+			assert_ok!(OffchainPallet::do_something(Origin::signed(1), 42));
 			// asserting that the stored value is equal to what we stored
-			assert_eq!(TemplateModule::something(), Some(42));
+			assert_eq!(OffchainPallet::something(), Some(42));
 		});
 	}
 }

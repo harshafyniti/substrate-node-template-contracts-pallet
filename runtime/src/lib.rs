@@ -7,7 +7,8 @@
 // Make the WASM binary available.
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
-
+//added for offchain_worker pallet
+use sp_runtime::transaction_validity;
 use sp_std::prelude::*;
 /*** Add This Line ***/
 use contracts_rpc_runtime_api::ContractExecResult;
@@ -75,8 +76,16 @@ pub type Hash = sp_core::H256;
 /// Digest item type.
 pub type DigestItem = generic::DigestItem<Hash>;
 
+//added for offchain worker pallet
+// Define the transaction signer using the key definition
+type SubmitTransaction = system::offchain::TransactionSubmitter<
+  offchain_pallet::crypto::Public, Runtime, UncheckedExtrinsic>;
+
+
+
 /// Used for the module template in `./template.rs`
-mod template;
+//mod template;
+mod offchain_pallet;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
 /// the specifics of the runtime. They can then be made to be agnostic over specific formats
@@ -293,9 +302,54 @@ impl sudo::Trait for Runtime {
 }
 
 /// Used for the module template in `./template.rs`
-impl template::Trait for Runtime {
-	type Event = Event;
+//impl template::Trait for Runtime {
+//	type Event = Event;
+//}
+impl offchain_pallet::Trait for Runtime {
+  type Event = Event;
+  type Call = Call;
+
+  // To use signed transactions in your runtime
+  type SubmitSignedTransaction = SubmitTransaction;
+
+  // To use unsigned transactions in your runtime
+  type SubmitUnsignedTransaction = SubmitTransaction;
 }
+
+
+/// The payload being signed in transactions.
+pub type SignedPayload = generic::SignedPayload<Call, SignedExtra>;
+
+//added for offchain worker pallet
+impl system::offchain::CreateTransaction<Runtime, UncheckedExtrinsic> for Runtime {
+  type Public = <Signature as Verify>::Signer;
+  type Signature = Signature;
+
+  fn create_transaction<TSigner: system::offchain::Signer<Self::Public, Self::Signature>> (
+    call: Call,
+    public: Self::Public,
+    account: AccountId,
+    index: Index,
+  ) -> Option<(Call, <UncheckedExtrinsic as sp_runtime::traits::Extrinsic>::SignaturePayload)> {
+    let period = 1 << 8;
+    let current_block = System::block_number().saturated_into::<u64>();
+    let tip = 0;
+    let extra: SignedExtra = (
+      system::CheckVersion::<Runtime>::new(),
+      system::CheckGenesis::<Runtime>::new(),
+      system::CheckEra::<Runtime>::from(generic::Era::mortal(period, current_block)),
+      system::CheckNonce::<Runtime>::from(index),
+      system::CheckWeight::<Runtime>::new(),
+      transaction_payment::ChargeTransactionPayment::<Runtime>::from(tip),
+    );
+    let raw_payload = SignedPayload::new(call, extra).ok()?;
+    let signature = TSigner::sign(public, &raw_payload)?;
+    let address = Indices::unlookup(account);
+    let (call, extra, _) = raw_payload.deconstruct();
+    Some((call, (address, signature, extra)))
+  }
+}
+
 
 construct_runtime!(
 	pub enum Runtime where
@@ -312,7 +366,10 @@ construct_runtime!(
 		TransactionPayment: transaction_payment::{Module, Storage},
 		Sudo: sudo,
 		// Used for the module template in `./template.rs`
-		TemplateModule: template::{Module, Call, Storage, Event<T>},
+		//TemplateModule: template::{Module, Call, Storage, Event<T>},
+                //added for offchain worker pallet
+		OffchainPallet: offchain_pallet::{ Module, Call, Storage, Event<T> },
+
 		RandomnessCollectiveFlip: randomness_collective_flip::{Module, Call, Storage},
                 /*** Add This Line ***/
                 Contracts: contracts,
