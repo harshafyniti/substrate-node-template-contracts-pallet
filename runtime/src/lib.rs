@@ -8,6 +8,7 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 //added for offchain_worker pallet
+use sp_runtime::traits::SaturatedConversion;
 use sp_runtime::transaction_validity;
 use sp_std::prelude::*;
 /*** Add This Line ***/
